@@ -1,0 +1,83 @@
+########################################################################################
+# This script takes a CSV file as input with data at the period-location-specific level.
+# From it, it outputs the same data in a json file that can be imported into MapVisualizer on my website.
+#
+# The input file should have the following format (one and only one row for each period-location):
+#	Week,DEP,Var1,Var2,Var3
+#	Week1,01,3,2,6
+#	Week1,2A,2,5,4
+#	Week2,01,4,8,2
+#	Week2,2A,1,3,6
+#
+# The id's for period and for geographic entity are treated as strings, but the values are converted to float,
+# thus they should be numeric.
+#
+# The output file looks as follows:
+# {
+# 	"periodIdField" :	"Week",
+# 	"geoIdField" :		"DEP",
+# 	"periodIds" :		["Week1", "Week2"],
+# 	"geoIds" :			["01", "2A"],
+# 	"VariableNames":	["Var1", "Var2", "Var3"],
+# 	"values":			[[[3,2,6], [2,5,4]], [[4,8,2], [1,3,6]]]
+# }
+# 
+# Example use:
+#	python convertCsv2Json.py input.csv output.json
+########################################################################################
+
+import sys, json
+from file_access import readDataFromFile
+
+# Read input arguments
+[inputFile, outputFile] = sys.argv[1:3]
+
+# Get unique set of geoId's and unique set of periodId's and geoId's
+[periodIds, geoIds] = readDataFromFile(inputFile, ',', True, [1, 2])
+periodIds = sorted(list(set(periodIds)))
+geoIds = sorted(list(set(geoIds)))
+
+#### Read file line by line
+fin = open(inputFile, 'r')
+
+# Get variable names from headers
+line = fin.readline()
+headers = line.rstrip().split(',')
+periodIdField = headers[0]
+geoIdField = headers[1]
+NumVars = len(headers) - 2
+varNames = headers[2:]
+
+values = [[ [] for gg in geoIds  ] for pp in periodIds]
+
+# Read the other values
+line = fin.readline()
+while line:
+    elements = line.rstrip().split(',')
+    periodId = elements[0]
+    geoId = elements[1]
+    # Convert strings to numeric
+    recValues = elements[2:]
+    recValues = [float(vv) for vv in recValues]
+    
+    # 
+    periodIdx	= periodIds.index(periodId)
+    geoIdx		= geoIds.index(geoId)
+    values[periodIdx][geoIdx] = recValues
+    
+    # Move to next line
+    line = fin.readline()
+
+fin.close()
+
+# Put everything togeter
+res = {}
+res['periodIdField']	= periodIdField
+res['geoIdField']		= geoIdField
+res['periodIds']		= periodIds
+res['geoIds']			= geoIds
+res['values']			= values
+res['VariableNames']	= varNames
+
+with open(outputFile, "w") as myfile:
+    json.dump(res, myfile)

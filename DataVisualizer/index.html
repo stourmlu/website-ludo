@@ -1,0 +1,1072 @@
+<!--  Chech this out: https://www.d3-graph-gallery.com/graph/scatter_basic.html -->
+<!-- Check this out: https://www.npmjs.com/package/pca-js -->
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>Visualize your data</title>
+		<link rel="stylesheet" href="../assets/css/ludo_style.css">
+    
+	<!-- Load d3.js -->
+<!--	<script src="https://unpkg.com/mathjs/dist/math.min.js"></script>  -->
+	<script src="https://unpkg.com/mathjs/lib/browser/math.js"></script>
+	<script src="https://d3js.org/d3.v4.js"></script>
+	<script src="../assets/js/csv2array.js"></script>
+	<script src="../assets/js/kmeans_algo.js"></script>
+	<script src="../assets/js/regression.js"></script>
+<!--	<script src="https://cdn.jsdelivr.net/npm/pca-js@1.0.0/pca.min.js"></script>-->
+  </head>
+  <body>
+  	<div id="instructions_section">
+  		<h3>Instructions</h3>
+  		This tool allows you to easily visualize data on your web browser.
+ 		After loading a data file in CSV format, you can click on + to add a scatter plot corresponding to two specific variables.
+  		<br>
+ 		You can also obtain a summary of each variable, or run the k-means algorithm.
+ 		If you no longer want to display one of the plots or tables, you can click on - to delete it.
+  		<br>
+  		You can export any plot (in SVG format) or table (in CSV format) by clicking on the corresponding button.
+  		<br>
+  		The plots are zoomable with the scroll of a mouse, and can be moved by drag-and-drop.
+  		<br>
+  		<br>
+  		Your data is not being shared, it simply stays on your local computer: the input file is simply loaded within your web browser and is not uploaded to the server. 
+  		The web application relies only on client-side javascript.
+  	<hr>
+  	</div>
+
+  	<div id="upload_section">
+  		<div id="file1_div">
+  			<label>Please select your data file:</label> <input type="file" id="file1" />
+  		</div>
+  	</div>
+  	
+  	<div id="visualization_section">
+  		<h1 id='mytitle'></h1>
+  		<img id='spinner' src='../assets/images/spinner.gif' class="hiddenImg"></img>
+  		<div id="svgRectsContainer"></div>
+  		<br>
+  		<div id='video_imgs' class='hidden'>
+  			<img id="img_previous" src="../assets/images/previous.png" onclick="move2PreviousPeriod()" class="video_img"></img>
+  			<img id="img_play" src="../assets/images/play.png" onclick="resumeVideo()" class="video_img"></img>
+  			<img id="img_pause" src="../assets/images/pause.png" onclick="pauseVideo()" class="video_img hiddenImg"></img>
+  			<img id="img_stop" src="../assets/images/stop.png" onclick="stopVideo()" class="video_img greyedImg"></img>
+  			<img id="img_next" src="../assets/images/next.png" onclick="move2NextPeriod()" class="video_img"></img>
+	  		<img id="img_plus" src="../assets/images/plus.png" onclick="openAddPlotMenu()" class="clickable"></img>
+  		</div>
+  		<br>
+  	</div>
+  	</div>
+  	
+  	
+  	<script type="text/javascript">
+		// Show spinner
+		function showSpinner(){
+			d3.select("#spinner").classed('hiddenImg', false);
+		}
+		// Hide spinner
+		function hideSpinner(){
+			d3.select("#spinner").classed('hiddenImg', true);
+		}
+		
+		// Function to save a string to file
+		// Example use: saveData(mytext, 'my_plot.svg');
+		var saveData = (function () {
+    		var a = document.createElement("a");
+    		document.body.appendChild(a);
+    		a.style = "display: none";
+    		return function (mytext, fileName) {
+    		    var blob = new Blob([mytext], {type: "octet/stream"}),
+    		        url = window.URL.createObjectURL(blob);
+    		    a.href = url;
+    		    a.download = fileName;
+    		    a.click();
+    		    window.URL.revokeObjectURL(url);
+			};
+		}());
+
+		var data;
+		var variableNames;
+		
+		function handleFileSelect1(evt) {
+			showSpinner();
+			for (var i = 0, f; f = evt.target.files[i]; i++) {
+				var reader = new FileReader();
+				reader.onload = function(e){
+					try {
+						data = e.target.result;
+						data = csv2array(data);
+						variableNames = data[0];
+						data = data.slice(1);
+						for(ii=0; ii<data.length; ii++){
+							for(jj=0; jj<data[ii].length; jj++){
+								data[ii][jj] = parseFloat(data[ii][jj]);
+							}
+						}
+						M = math.matrix(data); // Make a matrix from the array data
+						NumObs = M._size[0];
+						NumCols = M._size[1];
+					}
+					catch (ex) {alert('error when trying to parse json = ' + ex);}
+				}
+				reader.onloadend = function(e){
+					hideSpinner();
+					d3.select("#upload_section").classed('hidden', true);
+					d3.select("#instructions_section").classed('hidden', true);
+					d3.select("#video_imgs").classed('hidden', false);
+					ready();
+				}
+				reader.readAsText(f);
+			}
+		}
+		document.getElementById('file1').addEventListener('change', handleFileSelect1, false);
+
+
+    	// Set constants
+    	plotWidth		= 500;			// Dimensions of plot rectangle
+    	plotHeight		= 450;			// Dimensions of plot rectangle
+    	videoInterval	= 200;			// Time interval for the video, and initialize intervalID
+    	padding = 50;
+				
+		// Making group of elements in the svg's
+		var svgRectsContainer = d3.select("#svgRectsContainer")
+
+		// Making the tooltips
+		var div1 = d3.select("body").append("div")   
+    		.attr("class", "tooltip")               
+    		.style("opacity", 0);
+		
+		// Zooming behavior
+		var zoom = d3.zoom()
+    		.scaleExtent([1, 20])
+    		.on("zoom", function() {
+    			d3.selectAll("g.plot").attr("transform", d3.event.transform);
+			});
+			
+		// Initializations of global variables
+		var curPlotIdx = 0;
+    	
+    	function makeHTML4tooltip(d){
+    	    myhtml = "";
+    	    mypropKeys = Object.keys(d.properties);
+    	    for (idx = 0; idx < mypropKeys.length; idx++) {
+				mypropKey = mypropKeys[idx];
+				mypropValue = d.properties[mypropKey];
+				myhtml += (mypropKey + ":" + mypropValue + "<br/>")
+			}
+    		return myhtml;
+    	}
+    	
+    	// This function draws a scatter plot.
+    	// values should be an array of (NumObs) arrays (with two columns).
+    	function scatterPlot(gSelection, values){
+    		maxValue1 = -Infinity;
+    		minValue1 = Infinity;
+    		maxValue2 = -Infinity;
+    		minValue2 = Infinity;
+    	
+    		// Find minimum and maximum values
+    		for(ii=0; ii<data.length; ii++){
+				if(values[ii][0] > maxValue1 ){maxValue1 = values[ii][0]}
+				if(values[ii][0] < minValue1 ){minValue1 = values[ii][0]}
+				if(values[ii][1] > maxValue2 ){maxValue2 = values[ii][1]}
+				if(values[ii][1] < minValue2 ){minValue2 = values[ii][1]}
+			}    	
+    	
+			// Add X axis
+			var x = d3.scaleLinear()
+				.domain([minValue1, maxValue1])
+				.range([ 0, plotWidth ]);
+			gSelection.append("g")
+				.attr("transform", "translate(0," + plotHeight + ")")
+				.call(d3.axisBottom(x));
+
+			// Add Y axis
+			var y = d3.scaleLinear()
+				.domain([minValue2, maxValue2])
+				.range([ plotHeight, 0]);
+			gSelection.append("g")
+				.call(d3.axisLeft(y));
+    	
+			// Draw the plot
+			gSelection.selectAll("dot")
+  				.data(values)
+					.enter()
+					.append("circle")
+      				.attr("cx", function (d) { return x(d[0]); } )
+      				.attr("cy", function (d) { return y(d[1]); } )
+      				.attr("r", 1.5)
+      				.style("fill", "#69b3a2")
+		}
+		
+		// This function draws time series. On the X axis is the time, on the Y axis I can have multiple curves.
+		function plotTimeSeries(gSelection, Xvalues, Yvalues){
+			// Yvalues[ii][jj] should be the value of variable Y_ii at period jj
+			// Xvalues[jj] should be the date at period jj
+		
+			// Read dimensions
+			var NumPeriods = Xvalues.length;
+			var NumY = Yvalues.length;
+		
+    		// Find minimum and maximum Y values
+			var YminValue = Infinity;
+			var YmaxValue = -Infinity;
+			for(ii=0; ii<NumY; ii++){
+				for(jj=0; jj<NumPeriods; jj++){
+					if(Yvalues[ii][jj] > YmaxValue ){YmaxValue = Yvalues[ii][jj]}
+					if(Yvalues[ii][jj] < YminValue ){YminValue = Yvalues[ii][jj]}
+				}
+			}    		
+			
+			/////// TO DO  ///////
+			var period_idces = []; for (var jj = 0; jj < NumPeriods; jj++) {period_idces.push(jj);}
+			Xvalues = period_idces;
+			//////////////////////
+    		
+			// Add X axis
+			var x = d3.scaleLinear() // TO DO: d3.js comes with d3.scaleTime()
+				.domain([0, NumPeriods])
+				.range([ 0, plotWidth ]);
+			gSelection.append("g")
+				.attr("transform", "translate(0," + plotHeight + ")")
+				.call(d3.axisBottom(x));
+			
+			// Add xticks
+			// TO DO: Figure out xticks_labels + xticks (+ are these days? months? years?)
+    		
+			// Add Y axis
+			var y = d3.scaleLinear()
+				.domain([YminValue, YmaxValue])
+				.range([ plotHeight, 0]);
+			gSelection.append("g")
+				.call(d3.axisLeft(y));
+    		
+    		// Define cololineColors
+    		var lineColors = ['steelblue', 'red', 'green', 'black']; // TO DO: I need more colors
+    		var lineWidth = 1.5;
+    		
+			// Draw the plot
+			var period_idces = []; for (var jj = 0; jj < NumPeriods; jj++) {period_idces.push(jj);}
+			for(ii=0; ii<NumY; ii++){
+				console.log(lineColors[ii]);
+	    		gSelection.append("path")
+	  				.datum(period_idces)
+					.attr("fill", 'none')
+					.attr("stroke", lineColors[ii])
+					.attr("stroke-width", lineWidth)
+					.attr("d", d3.line()
+						.x(function(jj){return x(Xvalues[jj])})
+						.y(function(jj){return y(Yvalues[ii][jj])})
+						)
+   			}
+    		
+    		// Add the legend
+			// TO DO
+		}
+		
+    	
+    	// TO DO
+    	function runPCA() {
+    		var vectors = PCA.getEigenVectors(data);
+    		var topOnePctage = PCA.computePercentageExplained(vectors,vectors[0]);
+    		var topTwoPctage = PCA.computePercentageExplained(vectors,vectors[0],vectors[1]);
+    	}
+    	
+    	
+		
+		/// Called when all the data (and geography) are loaded
+		function ready() {
+			/********* Other initializations ********/			
+			// Hide spinner
+//			hideSpinner();
+			addRawDataTable();
+		}
+
+		// Opens up a menu in which the user decides which plot to add
+		function openAddPlotMenu(){
+ 			var newPlotMenu = d3.select("body").append("div")
+     			.attr("id", "newPlotMenu")
+    			.attr("class", "newPlotMenu")
+    			.text("What do you want to do?")
+    		
+    		var myselect0 = newPlotMenu.append('select').attr('id', 'select0_plotType')
+//    		var plotTypes = ['PCA', 'Histogram'];
+    		var plotTypes = ['Display data table', 'Data summary', 'Scatter plot', 'K-means', 'Linear regression (OLS)', 'Multivariate linear regression', 'Time series plot'];
+    		plotTypes.forEach(function (item, index) {
+     			myselect0.append('option').attr('value', item).html(item)
+			});
+    				
+			newPlotMenu.append('br')
+			newPlotMenu.append('button').html('OK').attr('onclick', "processOKAddPlotMenu();")
+			newPlotMenu.append('button').html('Cancel').attr('onclick', "processCancelAddPlotMenu();")
+		}
+		
+		function processOKAddPlotMenu(){
+			// Get menu elements
+			var newPlotMenu = d3.select('#newPlotMenu');
+			
+			// Remove buttons in menu
+			newPlotMenu.selectAll('button').remove()
+			
+			// Get value chosen (type of plot)
+			var myselect0 = document.getElementById('select0_plotType');
+			var valueChosen1 = myselect0.options[myselect0.selectedIndex].value;
+			
+			// Initialize action to be taken if user clicks on OK
+			var OK_action;
+			
+			
+			// Display data table
+			if(valueChosen1 == 'Display data table'){
+				processOKAddRawDataTable();
+				return;
+			}
+			
+			// Scatter plot: choose options
+			if(valueChosen1 == 'Scatter plot'){
+				newPlotMenu.append('p').html("Choose variable 1 (X axis):")
+     			myselect1 = newPlotMenu.append('select').attr('id', 'newPlotMenuSelect1')
+     			newPlotMenu.append('p').html("Choose variable 2 (Y xaxis):")
+     			myselect2 = newPlotMenu.append('select').attr('id', 'newPlotMenuSelect2')
+     			variableNames.forEach(function (item, index) {
+     				myselect1.append('option').attr('value', item).html(item)
+     				myselect2.append('option').attr('value', item).html(item)
+				});
+				OK_action="processOKAddScatterPlot();";
+			}
+			
+			// K-means: choose options
+			if(valueChosen1 == 'K-means'){
+				newPlotMenu.append('p').html("Choose number of clusters:")     			
+     			myselect1 = newPlotMenu.append('select').attr('id', 'newPlotMenuSelect1')
+     			
+     			var possibleNumClusters = [2,3,4,5,6];
+     			possibleNumClusters.forEach(function (item, index) {
+     				myselect1.append('option').attr('value', item).html(item)
+				});
+				OK_action="processOKAddKmeans();";
+			}
+			
+			// Linear regression (OLS): choose Y variable and X variables
+			if(valueChosen1 == 'Linear regression (OLS)'){
+				// Add choice of Y variable
+				newPlotMenu.append('p').html("Choose Y variable:")     			
+     			myselect1 = newPlotMenu.append('select').attr('id', 'newPlotMenuSelect1')
+     			variableNames.forEach(function (item, index) {
+     				myselect1.append('option').attr('value', item).html(item)
+				});
+				
+				// Add choice of X variables
+				newPlotMenu.append('p').html("Choose X variables:")
+				var possibleXs = ['Intercept'].concat(variableNames);
+     			possibleXs.forEach(function (item, index) {
+     				newPlotMenu.append('input').attr('type', 'checkbox').attr('value', item)
+     				newPlotMenu.append('label').html(item)
+     				newPlotMenu.append('br')
+				});
+				OK_action="processOKaddLinearRegressionBox();";
+			}
+			
+			// Multivariate linear regression: choose Y variables and X variables
+			if(valueChosen1 == 'Multivariate linear regression'){
+				// Add choice of Y variable
+				var boxY = newPlotMenu.append('div').attr('id', 'MultivarLinRegr_Box_Y')
+				boxY.append('p').html("Choose Y variables:")
+     			variableNames.forEach(function (item, index) {
+     				boxY.append('input').attr('type', 'checkbox').attr('value', item)
+     				boxY.append('label').html(item)
+     				boxY.append('br')
+				});
+				
+				// Add choice of X variables
+				var boxX = newPlotMenu.append('div').attr('id', 'MultivarLinRegr_Box_X')
+				boxX.append('p').html("Choose X variables:")
+				var possibleXs = ['Intercept'].concat(variableNames);
+     			possibleXs.forEach(function (item, index) {
+     				boxX.append('input').attr('type', 'checkbox').attr('value', item)
+     				boxX.append('label').html(item)
+     				boxX.append('br')
+				});
+				OK_action="processOKaddMultivariateLinearRegressionBox();";
+			}
+			
+			// Time series plot: choose options
+			if(valueChosen1 == 'Time series plot'){
+				// Add choice of Y variables
+				var boxY = newPlotMenu.append('div').attr('id', 'TimeSeriesPlot_Box_Y')
+				boxY.append('p').html("Choose Y variables:")
+     			variableNames.forEach(function (item, index) {
+     				boxY.append('input').attr('type', 'checkbox').attr('value', item)
+     				boxY.append('label').html(item)
+     				boxY.append('br')
+				});
+				
+				// Add choice of X variable
+				newPlotMenu.append('p').html("Choose X variable (time):")     			
+     			myselect1 = newPlotMenu.append('select').attr('id', 'newPlotMenuSelect1')
+     			variableNames.forEach(function (item, index) {
+     				myselect1.append('option').attr('value', item).html(item)
+				});
+				OK_action="processOKAddTimeSeriesPlot();";
+			}
+			
+			
+			// Summary statistics
+			if(valueChosen1 == 'Data summary'){
+				processOKAddSummaryStats();
+				return;
+			}
+			
+			// Histogram
+			if(valueChosen1 == 'Histogram'){
+				newPlotMenu.append('p').html("Choose variable:")
+     			myselect1 = newPlotMenu.append('select').attr('id', 'newPlotMenuSelect1')
+     			variableNames.forEach(function (item, index) {
+     				myselect1.append('option').attr('value', item).html(item)
+				});
+				OK_action = "processOKAddHistogram();";
+			}
+			
+			newPlotMenu.append('br');
+			newPlotMenu.append('button').html('OK').attr('onclick', OK_action)
+			newPlotMenu.append('button').html('Cancel').attr('onclick', "processCancelAddPlotMenu();")
+		}
+		
+		// Process click on OK in the menu to add scatter plot
+		function processOKAddScatterPlot(){
+			var sel1 = document.getElementById('newPlotMenuSelect1');
+			var sel2 = document.getElementById('newPlotMenuSelect2');
+			valueChosen1 = sel1.options[sel1.selectedIndex].value;
+			valueChosen2 = sel2.options[sel2.selectedIndex].value;
+			addScatterPlot(valueChosen1, valueChosen2);
+			d3.select("body").selectAll("#newPlotMenu").remove()
+		}
+		
+		// Process click on OK in the menu to add k-means
+		function processOKAddKmeans(){
+			var sel1 = document.getElementById('newPlotMenuSelect1');
+			NumClusters = sel1.options[sel1.selectedIndex].value;
+			addKmeans(NumClusters);
+			d3.select("body").selectAll("#newPlotMenu").remove()
+		}
+		
+		// Process click on OK in the menu to add linear regression
+		function processOKaddLinearRegressionBox(){
+			// Figure out which is the Y variable chosen
+			var sel1 = document.getElementById('newPlotMenuSelect1');
+			var Y_chosen = sel1.options[sel1.selectedIndex].value;
+			
+			// Collect X variables chosen
+			var Xs_chosen = [];
+			var newPlotMenu = d3.select('#newPlotMenu');
+			newPlotMenu.selectAll("input").each(function (d){
+				var inputNode = d3.select(this).node();
+				if(inputNode.checked){
+					Xs_chosen.push(inputNode.value);
+				}
+			});
+			
+			// Put together the data for vector Y
+			var Y_idx = variableNames.indexOf(Y_chosen);
+			var Yvec = [];
+			for(var ii = 0; ii < data.length; ii++){
+				Yvec.push(data[ii][Y_idx]);
+			}
+			
+			// Put together the data for matrix X
+			X_idxes = [];
+			for(var ii = 0; ii < Xs_chosen.length; ii++){
+				var X_chosen_i = Xs_chosen[ii];
+				if(X_chosen_i == 'Intercept'){
+					X_idxes.push(-9);
+				} else{
+					X_idxes.push(variableNames.indexOf(X_chosen_i));
+				}
+			}
+			var Xmat = [];
+			for(var ii = 0; ii < data.length; ii++){
+				var row_values = [];
+				for(var jj = 0; jj < X_idxes.length; jj++){
+					X_idx = X_idxes[jj];
+					if(X_idx == -9){
+						myvalue = 1;
+					} else{
+						myvalue = data[ii][X_idx];
+					}
+					row_values.push(myvalue);
+				}
+				Xmat.push(row_values);
+			}	
+			
+			// Run the linear regression
+			var OLS_res = runOLS(Yvec, Xmat);
+			
+			// Open a new box with linear regression results
+			addLinearRegressionBox(OLS_res, Y_chosen, Xs_chosen);
+			
+			newPlotMenu.remove()
+		}
+		
+		function processOKaddMultivariateLinearRegressionBox(){
+			var newPlotMenu = d3.select('#newPlotMenu');
+			
+			// Collect Y variables chosen
+			var Ys_chosen = [];
+			var boxY = newPlotMenu.select('#MultivarLinRegr_Box_Y');
+			boxY.selectAll("input").each(function (d){
+				var inputNode = d3.select(this).node();
+				if(inputNode.checked){
+					Ys_chosen.push(inputNode.value);
+				}
+			});
+			
+			// Collect X variables chosen
+			var Xs_chosen = [];
+			var boxX = newPlotMenu.select('#MultivarLinRegr_Box_X');
+			boxX.selectAll("input").each(function (d){
+				var inputNode = d3.select(this).node();
+				if(inputNode.checked){
+					Xs_chosen.push(inputNode.value);
+				}
+			});
+			
+			// Get idxes of Y variables and idxes of X variables
+			var Y_idxes = []; var X_idxes = [];
+			for(var ii = 0; ii < Ys_chosen.length; ii++){
+				Y_idxes.push(variableNames.indexOf(Ys_chosen[ii]));
+			}
+			for(var ii = 0; ii < Xs_chosen.length; ii++){
+				var X_chosen_i = Xs_chosen[ii];
+				if(X_chosen_i == 'Intercept'){
+					X_idxes.push(-9);
+				} else{
+					X_idxes.push(variableNames.indexOf(X_chosen_i));
+				}
+			}
+
+			// Put together the data for matrix Y and for matrix X
+			var Ymat = []; var Xmat = [];
+			for(var ii = 0; ii < data.length; ii++){
+				var Yrow_values = [];
+				var Xrow_values = [];
+				for(var jj = 0; jj < Y_idxes.length; jj++){
+					Yrow_values.push(data[ii][Y_idxes[jj]]);
+				}
+				for(var jj = 0; jj < X_idxes.length; jj++){
+					X_idx = X_idxes[jj];
+					if(X_idx == -9){
+						myvalue = 1;
+					} else{
+						myvalue = data[ii][X_idx];
+					}
+					Xrow_values.push(myvalue);
+				}
+				Ymat.push(Yrow_values);
+				Xmat.push(Xrow_values);
+			}
+			
+			// Run the multivariate linear regression
+			var OLS_res = runMultivariateOLS(Ymat,Xmat);
+			
+			// Open a new box with linear regression results
+			addMultivariateLinearRegressionBox(OLS_res, Ys_chosen, Xs_chosen);
+			
+			// Remove new plot menu
+			newPlotMenu.remove()
+		}
+		
+		function processOKAddTimeSeriesPlot(){
+			var newPlotMenu = d3.select('#newPlotMenu');
+			
+			// Collect Y variables chosen
+			var Ynames = [];
+			var boxY = newPlotMenu.select('#TimeSeriesPlot_Box_Y');
+			boxY.selectAll("input").each(function (d){
+				var inputNode = d3.select(this).node();
+				if(inputNode.checked){
+					Ynames.push(inputNode.value);
+				}
+			});
+			
+			// Figure out which is the X variable chosen
+			var sel1 = document.getElementById('newPlotMenuSelect1');
+			var Xname = sel1.options[sel1.selectedIndex].value;
+			
+			// Get idxes of Y variables and idxes of X variable
+			var X_idx = variableNames.indexOf(Xname);
+			var Y_idxes = [];
+			for(var ii = 0; ii < Ynames.length; ii++){
+				Y_idxes.push(variableNames.indexOf(Ynames[ii]));
+			}
+			
+			// Put together the data for matrix Y and for matrix X
+			var NumPeriods = data.length;
+			var NumY = Y_idxes.length;
+			var Yvalues = Array(NumY);
+			var Xvalues = Array(NumPeriods);
+			for(var jj =0; jj<NumPeriods; jj++){
+				Xvalues[jj] = data[jj][X_idx];
+			}
+			
+			for(var ii =0; ii<NumY; ii++){
+				Yvalues[ii] = Array(NumPeriods);
+				for(var jj =0; jj<NumPeriods; jj++){
+					Yvalues[ii][jj] = data[jj][Y_idxes[ii]];
+				}
+			}
+			
+			// Open a new box with linear regression results
+			addTimeSeriesPlotBox(Xvalues, Yvalues, Xname, Ynames);
+			
+			// Remove new plot menu
+			newPlotMenu.remove()
+		}
+		
+		
+		function processOKAddRawDataTable(){
+			addRawDataTable();
+			d3.select("body").selectAll("#newPlotMenu").remove()
+		}
+		
+		
+		// Process click on OK in the menu to add summary stats
+		function processOKAddSummaryStats(){
+			addDataSummaryTable();
+			d3.select("body").selectAll("#newPlotMenu").remove()
+		}
+		
+		function processOKAddHistogram(){
+			var sel1 = document.getElementById('newPlotMenuSelect1');
+			valueChosen1 = sel1.options[sel1.selectedIndex].value;
+			addHistogram(valueChosen1);
+			d3.select("body").selectAll("#newPlotMenu").remove()
+		}
+		
+		// Process click on Cancel in the menu to add plot
+		function processCancelAddPlotMenu(){
+			d3.select("body").selectAll("#newPlotMenu").remove()
+		}
+		
+		// Download a plot in svg format (idxes start at 0)
+		function downloadPlot(plotIdx){
+			mytext = svgRectsContainer.selectAll("#plotContainer" + plotIdx.toString()).select('svg') .node().outerHTML;
+			mytext = mytext.replace("<svg", "<svg xmlns='http://www.w3.org/2000/svg'");
+			saveData(mytext, 'my_plot' + plotIdx + '.svg');
+		}
+		
+		// Download a table in csv format
+		function downloadTable(plotIdx){
+			var mytext;
+			var svgContainer = document.getElementById("plotContainer" + plotIdx);
+			var mytables = svgContainer.getElementsByTagName('table');
+			
+			for(var ii=0; ii<mytables.length; ii++){
+				mytext = '';
+				var mytable = mytables[ii];
+				my_trs = mytable.getElementsByTagName('tr');
+				for(aa=0;aa<my_trs.length;aa++){
+					my_tr = my_trs[aa];
+					//my_tds = my_tr.getElementsByTagName('td');
+					my_tds = my_tr.querySelectorAll('th,td')
+					for(bb=0;bb<my_tds.length;bb++){
+						my_td = my_tds[bb];
+						mytext += my_td.innerText;
+						if(bb < my_tds.length-1){
+							mytext += ',';
+						}
+					}
+					mytext += '\n';
+				}
+				if(mytables.length == 1){
+					saveData(mytext, 'my_table' + plotIdx + '.csv');
+				} else{
+					saveData(mytext, 'my_table' + plotIdx + '_' + (ii+1) + '.csv');
+				}
+			}
+		}
+		
+		// Remove a plot (idxes start at 0)
+		function removePlot(plotIdx){
+			svgRectsContainer.selectAll("#plotContainer" + plotIdx.toString()).remove()
+		}
+		
+		// Function to subset a column
+		function subsetColumn(A, colIdx){
+			var rowCount = A.size()[0];
+			return math.subset(A, math.index(math.range(0, rowCount), colIdx));
+		}
+		
+		
+		// Function to be called when adding an exhibit, at the beginning
+		function addExhibit_start(){
+			// Get plotIdx
+			var plotIdx = curPlotIdx;
+			curPlotIdx = curPlotIdx + 1;
+			plotIdx = plotIdx.toString()
+			
+			// Create plotContainer
+			var plotContainer = svgRectsContainer.append('div')
+				.attr('class', 'plotContainer')
+    			.attr('id', 'plotContainer' + plotIdx)
+			
+			return [plotContainer, plotIdx];
+		}
+		
+		function addExhibit_end(plotContainer, plotIdx){
+			// Add clickable image that removes the plot
+			plotContainer.append('img')
+				.attr('src', '../assets/images/minus.png')
+				.attr('class', 'clickable')
+				.attr('onclick', 'removePlot(' + plotIdx +');')
+			
+			// Add clickable image that downloads the plot to a svg file
+			plotContainer.append('img')
+				.attr('src', '../assets/images/download.png')
+				.attr('class', 'clickable')
+				.attr('onclick', downloadAction)
+		}
+		
+		// Add a scatter plot
+		function addScatterPlot(varName1, varName2){
+			var plotContainer, plotIdx;
+			[plotContainer, plotIdx] = addExhibit_start();
+			
+			// Get indexes of the variables requested
+			varIdx1 = variableNames.indexOf(varName1);
+			varIdx2 = variableNames.indexOf(varName2);
+			
+			// Get data
+			values = subsetColumn(M, [varIdx1, varIdx2]).toArray(); // TO DO.... not sure it's efficient...
+			
+			// Add plot title
+			plotContainer.append('h2')
+				.html(varName2 +' = f(' + varName1 + ')')
+			
+			// Add svg for the plot
+			var svg = plotContainer.append('svg')
+			svg.attr("width", plotWidth + padding)
+			svg.attr("height", plotHeight + padding)
+			
+			// Add plot
+			svg.append("g")
+				.attr('id', 'g' + plotIdx)
+				.attr('class', 'plot')
+			svg.call(zoom)
+			scatterPlot(svg.select("#g" + plotIdx), values);
+				
+			// Download action and ending things
+			downloadAction = 'downloadPlot(' + plotIdx +');';
+			addExhibit_end(plotContainer, plotIdx, downloadAction);
+		}
+		
+		// Add kmeans
+		function addKmeans(NumClusters){
+			var plotContainer, plotIdx;
+			[plotContainer, plotIdx] = addExhibit_start();
+			
+			// Add plot title
+			plotContainer.append('h2')
+				.html('K-means with ' + NumClusters + ' clusters')
+			
+			// Set dimensions of plotContainer
+			plotContainer.attr("width", plotWidth - padding)
+			plotContainer.attr("height", plotHeight - padding)
+			
+			// Run k-means			
+			const NumIters = 10000;
+			var finalCriterion = Infinity;
+			var finalCentroids = [];
+			var finalAssignments = [];
+			var centroids, assignments, groupSizes, criterion, NumTries, finalGroupSizes;
+			for(var aa=0;aa<NumIters;aa++){
+				// Draw random starting centroids
+				var startingCentroids = drawRandomCentroids(data, NumClusters);
+				[centroids, assignments, groupSizes, criterion, NumTries] = run_kmeans(data, startingCentroids);
+
+				// Flag convergence issues (should never happen).
+				if(NumTries == 100){
+					console.log('Could not converge!');
+				}
+	
+				// If criterion improves current best results, store new results.
+				if(criterion < finalCriterion){
+					finalCriterion = criterion;
+					finalCentroids = centroids;
+					finalAssignments = assignments;
+					finalGroupSizes = groupSizes;
+				}
+			}
+			
+			// Display the results in a table
+			var kmeansTable = plotContainer.append('table').attr('border', '1px solid black');
+			// Headers
+			var tr = kmeansTable.append('tr').attr('class','header-row');
+			tr.append('th').text('');
+			for(kk=0;kk<NumClusters;kk++){
+				tr.append('th').text('Cluster ' + (kk+1))
+			}
+			// Cluster sizes
+			tr = kmeansTable.append('tr');
+			tr.append('th').text('Size');
+			for(kk=0;kk<NumClusters;kk++){
+				tr.append('td').text(finalGroupSizes[kk])
+			}
+			// Centroids
+			for(vv=0;vv<variableNames.length; vv++){
+				tr = kmeansTable.append('tr');
+				tr.append('th').text(variableNames[vv])
+				for(kk=0;kk<NumClusters;kk++){
+					tr.append('td').text(finalCentroids[kk][vv])
+				}
+			}
+			
+			// Add criterion value
+			plotContainer.append('p').text('Total within-cluster SS: ' + finalCriterion)
+			
+			// Display mappings of observations into clusters in an invisible table
+			var kmeansAssignmentTable = plotContainer.append('table')
+				.attr('border', '1px solid black')
+				.style('display', 'none')
+			// Headers
+			var tr = kmeansAssignmentTable.append('tr');
+			tr.append('td').text('ClusterAssignment');
+			// Rows
+			for(var ii=0; ii<finalAssignments.length; ii++){
+				tr = kmeansAssignmentTable.append('tr');
+				tr.append('td').text(1+finalAssignments[ii])
+			}
+			
+			// Download action and ending things
+			downloadAction = 'downloadTable(' + plotIdx +');';
+			addExhibit_end(plotContainer, plotIdx, downloadAction);
+		}
+		
+		// Add box for linear regression results
+		function addLinearRegressionBox(OLS_res, Y_varName, X_varNames){
+			var NumBetas = OLS_res[0].length;
+			
+			var plotContainer, plotIdx;
+			[plotContainer, plotIdx] = addExhibit_start();
+			
+			// Add plot title
+			plotContainer.append('h2').html('Linear regression (OLS): ' + Y_varName)
+			
+			// Set dimensions of plotContainer
+			plotContainer.attr("width", plotWidth - padding)
+			plotContainer.attr("height", plotHeight - padding)
+			
+			// Display the results in a table
+			var myTable = plotContainer.append('table').attr('border', '1px solid black');
+			// Headers
+			var tr = myTable.append('tr').attr('class','header-row');
+			tr.append('th').text('Variable');
+			tr.append('th').text('Coef.');
+			tr.append('th').text('Std. error');
+			tr.append('th').text('t-value');
+			
+			// Fill in table
+			for(jj=0;jj<NumBetas; jj++){
+				tr = myTable.append('tr');
+				tr.append('th').text(X_varNames[jj])
+				tr.append('td').text(OLS_res[0][jj])
+				tr.append('td').text(OLS_res[2][jj])
+				tr.append('td').text(OLS_res[3][jj])
+			}
+			
+			// Add criterion (R2)
+			R2 = OLS_res[4];
+			plotContainer.append('p').text('R-squared: ' + R2)
+			
+			// Download action and ending things
+			downloadAction = 'downloadTable(' + plotIdx +');';
+			addExhibit_end(plotContainer, plotIdx, downloadAction);
+		}
+		
+		// Add box for multivariate linear regression results
+		function addMultivariateLinearRegressionBox(OLS_res, Y_varNames, X_varNames){
+			var beta_hat = OLS_res[0];
+			const NumX = beta_hat.length;
+			const NumY = beta_hat[0].length;
+			if(Y_varNames.length != NumY || X_varNames.length != NumX){alert('Inconsistent dimensions.');}
+			
+			var plotContainer, plotIdx;
+			[plotContainer, plotIdx] = addExhibit_start();
+			
+			// Add plot title
+			plotContainer.append('h2').html('Multivariate linear regression')
+			
+			// Set dimensions of plotContainer
+			plotContainer.attr("width", plotWidth - padding)
+			plotContainer.attr("height", plotHeight - padding)
+			
+			// Display the results in a table
+			var myTable = plotContainer.append('table').attr('border', '1px solid black');
+			// Headers
+			var tr = myTable.append('tr').attr('class','header-row');
+			tr.append('th').text('');
+			for(var jj=0; jj<NumY; jj++){
+				tr.append('th').text(Y_varNames[jj]);
+			}
+			
+			// Fill in table
+			for(var ii=0;ii<NumX; ii++){
+				tr = myTable.append('tr');
+				tr.append('th').text(X_varNames[ii])
+				for(var jj=0; jj<NumY; jj++){
+					tr.append('td').text(beta_hat[ii][jj]);
+				}
+			}
+			
+			// Download action and ending things
+			downloadAction = 'downloadTable(' + plotIdx +');';
+			addExhibit_end(plotContainer, plotIdx, downloadAction);
+		}
+		
+		function addTimeSeriesPlotBox(Xvalues, Yvalues, Xname, Ynames){
+			var plotContainer, plotIdx;
+			[plotContainer, plotIdx] = addExhibit_start();
+			
+			// Add plot title
+			plotContainer.append('h2')
+				.html('Time series')
+			
+			// Add svg for the plot
+			var svg = plotContainer.append('svg')
+			svg.attr("width", plotWidth + padding)
+			svg.attr("height", plotHeight + padding)
+			
+			// Add plot
+			svg.append("g")
+				.attr('id', 'g' + plotIdx)
+				.attr('class', 'plot')
+			svg.call(zoom)
+			plotTimeSeries(svg.select("#g" + plotIdx), Xvalues, Yvalues, Xname, Ynames)
+				
+			// Download action and ending things
+			downloadAction = 'downloadPlot(' + plotIdx +');';
+			addExhibit_end(plotContainer, plotIdx, downloadAction);
+		}
+			
+		function addRawDataTable(){
+			var plotContainer, plotIdx;
+			[plotContainer, plotIdx] = addExhibit_start();
+			
+			// Add plot title
+			plotContainer.append('h2')
+				.html('Data')
+			
+			// Set dimensions of plotContainer
+			plotContainer.attr("width", plotWidth - padding)
+			plotContainer.attr("height", plotHeight - padding)
+			
+			// Display the results in a table
+			var rawDataTable = plotContainer.append('table').attr('border', '1px solid black');
+			// Headers
+			var tr = rawDataTable.append('tr').attr('class','header-row');
+			for(kk=0;kk<variableNames.length;kk++){
+				tr.append('th').text(variableNames[kk])
+			}
+			for(var ii=0;ii<data.length; ii++){
+				tr = rawDataTable.append('tr');
+				for(var kk=0;kk<data[0].length;kk++){
+					tr.append('td').text(data[ii][kk])
+				}
+			}
+			
+			// Download action and ending things
+			downloadAction = 'downloadTable(' + plotIdx +');';
+			addExhibit_end(plotContainer, plotIdx, downloadAction);
+		}
+		
+		
+		function getDataSummary(){
+			var summaryStats = [];
+			var NumVars = variableNames.length;
+			var NumObs = data.length;
+			for(var vv=0;vv<NumVars;vv++){
+				minValue = Infinity;
+				maxValue = -Infinity;
+				sumValues = 0;
+				for(var ii=0;ii<NumObs;ii++){
+					value_vi = data[ii][vv];
+					if(value_vi < minValue){minValue = value_vi;}
+					if(value_vi > maxValue){maxValue = value_vi;}
+					sumValues += value_vi;
+				}
+				avgValue = sumValues/NumObs;
+				summaryStats[vv] = [minValue, avgValue, maxValue];
+			}
+			return summaryStats;
+		}
+		
+		// Adding data summary
+		function addDataSummaryTable(){
+			var plotContainer, plotIdx;
+			[plotContainer, plotIdx] = addExhibit_start();
+			
+			// Add plot title
+			plotContainer.append('h2')
+				.html('Data summary')
+			
+			// Set dimensions of plotContainer
+			plotContainer.attr("width", plotWidth - padding)
+			plotContainer.attr("height", plotHeight - padding)
+			
+			// Get data summary
+			statsNames = ['Min', 'Avg', 'Max'];
+			var summaryStats = getDataSummary();
+			
+			// Display the results in a table
+			var summaryTable = plotContainer.append('table').attr('border', '1px solid black');
+			// Headers
+			var tr = summaryTable.append('tr').attr('class','header-row');
+			tr.append('th').text('');
+			for(kk=0;kk<statsNames.length;kk++){
+				tr.append('th').text(statsNames[kk])
+			}
+			for(var vv=0;vv<variableNames.length; vv++){
+				tr = summaryTable.append('tr');
+				tr.append('th').text(variableNames[vv])
+				for(var kk=0;kk<summaryStats[0].length;kk++){
+					tr.append('td').text(summaryStats[vv][kk])
+				}
+			}
+			
+			// Download action and ending things
+			downloadAction = 'downloadTable(' + plotIdx +');';
+			addExhibit_end(plotContainer, plotIdx, downloadAction);
+		}
+		
+		function addHistogram(varName){
+			var plotContainer, plotIdx;
+			[plotContainer, plotIdx] = addExhibit_start();
+			
+			// Get indexes of the variables requested
+			varIdx1 = variableNames.indexOf(varName);
+			
+			// Get data
+			values = subsetColumn(M, [varIdx1]).toArray(); // TO DO.... not sure it's efficient...
+			
+			// Add plot title
+			plotContainer.append('h2')
+				.html(varName)
+			
+			// Add svg for the plot
+			var svg = plotContainer.append('svg')
+			svg.attr("width", plotWidth + padding)
+			svg.attr("height", plotHeight + padding)
+			
+			// Add plot
+			svg.append("g")
+				.attr('id', 'g' + plotIdx)
+				.attr('class', 'plot')
+			svg.call(zoom)
+			//histogram(svg.select("#g" + plotIdx), values); // TO DO
+				
+			// Download action and ending things
+			downloadAction = 'downloadPlot(' + plotIdx +');';
+			addExhibit_end(plotContainer, plotIdx, downloadAction);
+		}
+	</script>
+  </body>
+</html>

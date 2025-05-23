@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>Visualize your own map!</title>
+		<link rel="stylesheet" href="../assets/css/ludo_style.css">
+		<script src="../video_animation.js"></script>
+    
+	<!-- Load d3.js -->
+	<script src="https://d3js.org/d3.v4.js"></script>
+	<script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
+	<script src="https://d3js.org/d3-geo-projection.v2.min.js"></script>
+  </head>
+  <body>
+  	<div id="instructions_section">
+  		<h3>Instructions</h3>
+  		This tool allows you to easily visualize one or more choropleth maps on your web browser, and should work for nearly any geographic scope.
+  		
+  		After loading your input files, you can click on + to add the choropleth map corresponding to a specific variable. Note that you
+  		can display multiple maps, in case you want to visualize two or more variables at the same time. If you no longer
+  		want to display one of the maps, you can click on - to delete it.
+  		<br>
+  		The maps are zoomable with the scroll of a mouse, and can be moved by drag-and-drop. If you provide data for multiple time periods,
+  		you can play a video that shows the evolution of the map(s) over time.
+  		
+  		
+  		<br>
+  		<br>
+  		<b>Input files</b>
+  		<br>
+  		You need to provide three files:
+  		<ul>
+  			<li> a file in geojson format that defines the geography of the shapes to be plotted </li>
+  			<li> a data file in json format that defines a set of variables, with a value associated to each geographic shape, potentially for multiple time periods </li>
+  			<li> a color-cutoff file in json format that determines, for each variable, the colors to be displayed as function of the value associated to the geographic shape</li>
+  		</ul>
+  		Sample input files, instructions and programs to prepare the input files from standard formats can be found <a href="input_instructions.html">here</a>.
+  		
+  		<br>
+  		<br>
+  		<b>Web browser and security</b>
+  		<br>
+  		While I expect the program to work for any modern web browser, it appears to be fastest with Google Chrome, 
+  		and other web browsers may be too slow for a nice user experience if you have large data.
+  		<br>
+  		The input files are simply loaded within your web browser and are not uploaded to the server.
+  		Even though your web browser may signal the page as "Not Secure", your data is not being shared, it simply stays on your local computer.
+  	<hr>
+  	</div>
+
+  	<div id="upload_section">
+		<h3>Inputs</h3>
+  		<div id="file1_div">
+  			<label>1) Select your geojson file:</label> <input type="file" id="file1" />
+  		</div>
+  		<div id="file2_div" class="hidden">
+  			<label>2) Select your data file:</label> <input type="file" id="file2" />
+  		</div>
+  		<div id="file3_div" class="hidden">
+  			<label>3) Select your color cutoff file:</label> <input type="file" id="file3" />
+  		</div>
+  	</div>
+  	
+  		<h1 id='mytitle'></h1>
+  		<img id='spinner' src='../assets/images/spinner.gif' class="hiddenImg"></img>
+  		<div id="svgRectsContainer"></div>
+  		<br>
+  		<div id='video_imgs' class='hidden'>
+  			<img id="img_previous" src="../assets/images/previous.png" onclick="move2PreviousPeriod()" class="video_img"></img>
+  			<img id="img_play" src="../assets/images/play.png" onclick="resumeVideo()" class="video_img"></img>
+  			<img id="img_pause" src="../assets/images/pause.png" onclick="pauseVideo()" class="video_img hiddenImg"></img>
+  			<img id="img_stop" src="../assets/images/stop.png" onclick="stopVideo()" class="video_img greyedImg"></img>
+  			<img id="img_next" src="../assets/images/next.png" onclick="move2NextPeriod()" class="video_img"></img>
+	  		<img id="img_plus" src="../assets/images/plus.png" onclick="openAddMapMenu()" class="clickable"></img>
+  		</div>
+  	</div>
+  	
+	<script type="text/javascript">
+		// Show spinner
+		function showSpinner(){
+			d3.select("#spinner").classed('hiddenImg', false);
+		}
+		// Hide spinner
+		function hideSpinner(){
+			d3.select("#spinner").classed('hiddenImg', true);
+		}
+		
+		// Function to save a string to file
+		// Example use: saveData(mytext, 'my_map.svg');
+		var saveData = (function () {
+    		var a = document.createElement("a");
+    		document.body.appendChild(a);
+    		a.style = "display: none";
+    		return function (mytext, fileName) {
+    		    var blob = new Blob([mytext], {type: "octet/stream"}),
+    		        url = window.URL.createObjectURL(blob);
+    		    a.href = url;
+    		    a.download = fileName;
+    		    a.click();
+    		    window.URL.revokeObjectURL(url);
+			};
+		}());
+
+
+		var data;
+		var colorCutoffs;
+
+		function handleFileSelect1(evt) {
+			showSpinner();
+			for (var i = 0, f; f = evt.target.files[i]; i++) {
+				var reader = new FileReader();
+				reader.onload = function(e){
+					try {topo = JSON.parse(e.target.result);}
+					catch (ex) {alert('error when trying to parse json = ' + ex);}
+				}
+				reader.onloadend = function(e){
+					hideSpinner();
+					d3.select("#file2_div").classed('hidden', false);
+				}
+				reader.readAsText(f);
+			}
+		}
+		function handleFileSelect2(evt) {
+			showSpinner();
+			for (var i = 0, f; f = evt.target.files[i]; i++) {
+				var reader = new FileReader();
+				reader.onload = function(e){
+					try {data = JSON.parse(e.target.result);}
+					catch (ex) {alert('error when trying to parse json = ' + ex);}
+				}
+				reader.onloadend = function(e){
+					hideSpinner();
+					d3.select("#file3_div").classed('hidden', false);
+				}
+				reader.readAsText(f);
+			}
+		}
+		function handleFileSelect3(evt) {
+			showSpinner();
+			for (var i = 0, f; f = evt.target.files[i]; i++) {
+				var reader = new FileReader();
+				reader.onload = function(e){
+					try {colorCutoffs = JSON.parse(e.target.result);}
+					catch (ex) {alert('error when trying to parse json = ' + ex);}
+				}
+				reader.onloadend = function(e){
+					hideSpinner();
+					d3.select("#upload_section").classed('hidden', true);
+					d3.select("#instructions_section").classed('hidden', true);
+					d3.select("#video_imgs").classed('hidden', false);
+					ready();
+				}
+				reader.readAsText(f);
+			}
+		}
+		document.getElementById('file1').addEventListener('change', handleFileSelect1, false);
+		document.getElementById('file2').addEventListener('change', handleFileSelect2, false);
+		document.getElementById('file3').addEventListener('change', handleFileSelect3, false);
+
+
+    	// Set constants
+    	mapWidth		= 500;			// Dimensions of map rectangle
+    	mapHeight		= 450;			// Dimensions of map rectangle
+    	videoInterval	= 200;			// Time interval for the video, and initialize intervalID
+    
+		// Get the geographic level from the URL (DEP by default)
+		var geoIdField;
+				
+		// Making group of elements in the svg's
+		var svgRectsContainer = d3.select("#svgRectsContainer")
+
+		// Making the tooltips
+		var div1 = d3.select("body").append("div")   
+    		.attr("class", "tooltip")               
+    		.style("opacity", 0);
+		
+		// Zooming behavior
+		var zoom = d3.zoom()
+    		.scaleExtent([1, 20])
+    		.on("zoom", function() {
+    			d3.selectAll("g.map").attr("transform", d3.event.transform);
+			});
+			
+		// Initializations of global variables
+		var myVariables = [];
+		var path;
+		var projection;
+		var colorDomains = [];
+		var colorScales = [];
+		var legendLabels = [];
+		var timeId;
+    	var timeMinId;
+    	var timeMaxId;
+		var intervalID = undefined;
+
+		// Function that fills colors of all maps
+		function setFillingColors(gSelection, periodData){
+			gIndex = gSelection.attr('id').slice(1)
+			varName = myVariables[gIndex];
+			varIdx = varNames.indexOf(varName)
+			colorScale = colorScales[varName];
+    		gSelection.selectAll("path")
+    			.attr("fill", function (d) {
+					geoUnitId = d.properties[geoIdField]
+					try {
+						geoIdx = geoIds.indexOf(geoUnitId)
+						d.total = periodData[geoIdx][varIdx]
+					} catch{
+						d.total = 0;
+					}
+					return colorScale(d.total);
+				})
+    	}
+    	
+    	// Get the data corresponding to the specific timePeriod
+    	function getPeriodData(){
+    		periodData = data['values'][timeId];
+    		return periodData;
+    	}
+    	
+    	function makeHTML4tooltip(d){
+    	    myhtml = "";
+    	    mypropKeys = Object.keys(d.properties);
+    	    for (idx = 0; idx < mypropKeys.length; idx++) {
+				mypropKey = mypropKeys[idx];
+				mypropValue = d.properties[mypropKey];
+				myhtml += (mypropKey + ":" + mypropValue + "<br/>")
+			}
+    		return myhtml;
+    	}
+    	
+    	function drawMap(gSelection){
+			// Draw the maps
+			gSelection.selectAll("path")
+    				.data(topo.features)
+					.enter()
+					.append("path")
+    				.attr("class", "regionDelimiter")
+					// draw each geo unit
+					.attr("d", d3.geoPath()
+						.projection(projection)
+					)
+					// Setting up tooltip
+					.on("mouseover", function(d) {
+						div1.transition()        
+						.duration(200)
+						.style("opacity", .9);
+						div1.html(makeHTML4tooltip(d))  
+						.style("left", (d3.event.pageX + 30) + "px")     
+						.style("top", (d3.event.pageY - 30) + "px")
+					})
+					.on("mouseout", function(d) {
+						div1.style("opacity", 0);
+						div1.html("")
+						.style("left", "-500px")
+						.style("top", "-500px");
+					});
+			
+			// Set colors
+			periodData = getPeriodData();
+			setFillingColors(gSelection, periodData);
+		}
+		
+		/// Called when all the data (and geography) are loaded
+		function ready() {
+			// Get geoIds, timeIds, and names of variables
+ 			geoIdField		= data['geoIdField']
+ 			periodIdField	= data['periodIdField']
+ 			geoIds			= data['geoIds']
+ 			periodIds		= data['periodIds']
+			varNames		= data['VariableNames']
+			timeMinId		= 0;
+			timeMaxId		= periodIds.length -1;
+			
+			/********* Define projection ********/
+    		/* Get extreme points and center */
+			coordsBox = topo.bbox;
+			coordsCenter = [0.5*(coordsBox[0]+coordsBox[2]), 0.5*(coordsBox[1]+coordsBox[3])];
+			coordsExtremes = [[coordsBox[0], coordsBox[1]], [coordsBox[2], coordsBox[3]]];
+			
+			// Find the optimal scale
+			projection0 = d3.geoConicConformal()
+				.center(coordsCenter)
+				.scale(1)
+				.translate([mapWidth / 2, mapHeight / 2]);
+ 			truc1 = projection0(coordsExtremes[0])
+ 			truc2 = projection0(coordsExtremes[1])
+ 			diffX = Math.abs(truc2[0] - truc1[0]);
+ 			diffY = Math.abs(truc2[1] - truc1[1]);
+ 			myscale = Math.min((mapWidth-5)/diffX, (mapHeight-5)/diffY);
+			
+			// Define the projection with the optimal scale
+			projection = d3.geoConicConformal()
+				//.center([2.454071, 46.279229])
+				//.scale(3500)
+				.center(coordsCenter)
+				.scale(myscale)
+				.translate([mapWidth / 2, mapHeight / 2]);
+			path = d3.geoPath();
+			path.projection(projection);
+
+			/********* Define color scales and legend labels ********/
+			// Define color scale and legend labels
+			for (idx = 0; idx < varNames.length; idx++) {
+				myVariable = varNames[idx];
+				myColorDomain = colorCutoffs[myVariable];
+
+				// Define color scale
+				myColorScale = d3.scaleThreshold()
+					.domain(myColorDomain)
+					.range(d3.schemeBlues[7]);
+				myLegendLabels = ["< " + myColorDomain[0].toString()];
+				
+				// Define labels for the legend
+				for (aa = 0; aa < myColorDomain.length; aa++) {
+					myLegendLabels.push(myColorDomain[aa].toString() + "+");
+				}
+				
+				// Store everything
+				colorDomains[myVariable] = myColorDomain;
+				colorScales[myVariable] = myColorScale;
+				legendLabels[myVariable] = myLegendLabels;
+			}
+			
+			/********* Other initializations ********/
+			// Reset timeId at start
+			timeId = timeMinId;
+			
+			// Set title
+			title4Display = periodTitle(timeId);
+			d3.select('#mytitle').text(title4Display)
+			
+			// Get period data
+			periodData = getPeriodData();
+			
+			// Hide spinner
+			hideSpinner();
+		}
+    	
+    	// Update display of all maps (title + filling of shapes)...
+    	// ... this is called when there is a change of time period
+		function updateDisplay4Period(){
+			title4Display = periodTitle(timeId);
+			d3.select('#mytitle').text(title4Display)
+			
+			periodData = getPeriodData();
+			
+			svgRectsContainer.selectAll("g.map").each(function(dd,i){
+    			setFillingColors(d3.select(this), periodData);
+    		})
+		}
+
+		// Opens up a menu in which the user decides which map to add
+		function openAddMapMenu(){
+ 			var newMapMenu = d3.select("body").append("div")
+     			.attr("id", "newMapMenu")
+    			.attr("class", "newMapMenu")
+     		newMapMenu.append('p').html("Choose variable")
+     		myselect = newMapMenu.append('select').attr('id', 'newMapMenuSelect')
+     		
+     		varNames.forEach(function (item, index) {
+     			myselect.append('option').attr('value', item).html(item)
+			});
+			
+			newMapMenu.append('br')
+			newMapMenu.append('button').html('OK').attr('onclick', "processOKAddMapMenu();")
+			newMapMenu.append('button').html('Cancel').attr('onclick', "processCancelAddMapMenu();")
+		}
+		
+		// Process click on OK in the menu to add map
+		function processOKAddMapMenu(){
+			var sel = document.getElementById('newMapMenuSelect');
+			valueChosen = sel.options[sel.selectedIndex].value;
+			addMap(valueChosen);
+			d3.select("body").selectAll("#newMapMenu").remove()
+		}
+		
+		// Process click on Cancel in the menu to add map
+		function processCancelAddMapMenu(){
+			d3.select("body").selectAll("#newMapMenu").remove()
+		}
+		
+		// Download a map in svg format (idxes start at 0)
+		function downloadMap(mapIdx){
+			mytext = svgRectsContainer.selectAll("#mapContainer" + mapIdx.toString()).select('svg') .node().outerHTML;
+			mytext = mytext.replace("<svg", "<svg xmlns='http://www.w3.org/2000/svg'");
+			saveData(mytext, 'my_map.svg');
+		}
+		
+		// Remove a map (idxes start at 0)
+		function removeMap(mapIdx){
+			svgRectsContainer.selectAll("#mapContainer" + mapIdx.toString()).remove()
+		}
+ 
+ 		// Add a map (idxes start at 0)
+		function addMap(varName){
+			// Get mapIdx, include relevant variable name in array myVariables
+			myVariables.push(varName)
+			mapIdx = myVariables.length - 1;
+			
+			colorDomain = colorDomains[varName];
+			colorScale = colorScales[varName];
+			legend_labels = legendLabels[varName];
+			
+			mapIdx = mapIdx.toString()
+			
+			// Create mapContainer
+			var mapContainer = svgRectsContainer.append('div')
+				.attr('class', 'mapContainer')
+    			.attr('id', 'mapContainer' + mapIdx)
+			
+			// Add map title
+			mapContainer.append('h2')
+				.html(varName)
+			
+			// Add svg for the map
+			var svg = mapContainer.append('svg')
+			svg.attr("width", mapWidth)
+			svg.attr("height", mapHeight)
+			
+			// Add map
+			svg.append("g")
+				.attr('id', 'g' + mapIdx)
+				.attr('class', 'map')
+			svg.call(zoom)
+			drawMap(svg.selectAll("g.map"), topo, myVariables.length-1);
+			
+			// Add legend
+			var ext_color_domain = [-Infinity].concat(colorDomain);
+			var legend = svg.selectAll("g.legend")
+				.data(ext_color_domain)
+				.enter().append("g")
+				.attr("class", "legend");
+			
+			var ls_w = 20, ls_h = 20;
+			legend.append("rect")
+				.attr("x", 20)
+				.attr("y", function(d, i){ return mapHeight - (i*ls_h) - 2*ls_h;})
+				.attr("width", ls_w)
+				.attr("height", ls_h)
+				.style("fill", function(d, i) { return colorScale(d); })
+				.style("opacity", 0.8);
+
+			legend.append("text")
+				.attr("x", 50)
+				.attr("y", function(d, i){ return mapHeight - (i*ls_h) - ls_h - 4;})
+				.text(function(d, i){ return legend_labels[i]; });
+			
+			// Add clickable image that downloads the map to a svg file
+			mapContainer.append('img')
+				.attr('src', '../assets/images/download.png')
+				.attr('class', 'clickable')
+				.attr('onclick', 'downloadMap(' + mapIdx +');')
+			
+			// Add clickable image that removes the map
+			mapContainer.append('img')
+				.attr('src', '../assets/images/minus.png')
+				.attr('class', 'clickable')
+				.attr('onclick', 'removeMap(' + mapIdx +');')
+		}
+		
+		// Function that outputs the title for the period
+		function periodTitle(mytimeId){
+			return periodIdField + ': ' + periodIds[mytimeId].toString();
+		}
+		
+	</script>
+      
+  </body>
+</html>

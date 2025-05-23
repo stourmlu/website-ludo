@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>Visualize your own map!</title>
+		<link rel="stylesheet" href="ludo_style.css">
+		<script src="../video_animation.js"></script>
+    
+	<!-- Load d3.js -->
+	<script src="https://d3js.org/d3.v4.js"></script>
+	<script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
+	<script src="https://d3js.org/d3-geo-projection.v2.min.js"></script>
+  </head>
+  <body>
+  	<div>
+  		<div id="file1_div">
+  			<label>1) Select your geojson file:</label> <input type="file" id="file1" />
+  		</div>
+  		<div id="file2_div" class="hidden">
+  			<label>2) Select your data file:</label> <input type="file" id="file2" />
+  		</div>
+  	
+  		<h1 id='mytitle'></h1>
+  		<img id='spinner' src='../assets/images/spinner.gif' class="hiddenImg"></img>
+  		<div id="svgRectsContainer"></div>
+  		<br>
+  		<img id="img_previous" src="../assets/images/previous.png" onclick="move2PreviousPeriod()" class="video_img"></img>
+  		<img id="img_play" src="../assets/images/play.png" onclick="resumeVideo()" class="video_img"></img>
+  		<img id="img_pause" src="../assets/images/pause.png" onclick="pauseVideo()" class="video_img hiddenImg"></img>
+  		<img id="img_stop" src="../assets/images/stop.png" onclick="stopVideo()" class="video_img greyedImg"></img>
+  		<img id="img_next" src="../assets/images/next.png" onclick="move2NextPeriod()" class="video_img"></img>
+  		
+  		<img id="img_plus" src="../assets/images/plus.png" onclick="openAddMapMenu()" class="clickable"></img>
+  		
+  	</div>
+  	
+	<script type="text/javascript">
+		// Show spinner
+		function showSpinner(){
+			d3.select("#spinner").classed('hiddenImg', false);
+		}
+		// Hide spinner
+		function hideSpinner(){
+			d3.select("#spinner").classed('hiddenImg', true);
+		}
+
+
+		var data;
+		var colorCutoffs;
+
+		function handleFileSelect1(evt) {
+			showSpinner();
+			for (var i = 0, f; f = evt.target.files[i]; i++) {
+				var reader = new FileReader();
+				reader.onload = function(e){
+					try {topo = JSON.parse(e.target.result);}
+					catch (ex) {alert('error when trying to parse json = ' + ex);}
+				}
+				reader.onloadend = function(e){
+					hideSpinner();
+					d3.select("#file2_div").classed('hidden', false);
+				}
+				reader.readAsText(f);
+			}
+		}
+		function handleFileSelect2(evt) {
+			showSpinner();
+			for (var i = 0, f; f = evt.target.files[i]; i++) {
+				var reader = new FileReader();
+				reader.onload = function(e){
+					try {data = JSON.parse(e.target.result);}
+					catch (ex) {alert('error when trying to parse json = ' + ex);}
+				}
+				reader.onloadend = function(e){
+					hideSpinner();
+					d3.select("#file1_div").classed('hidden', true);
+					d3.select("#file2_div").classed('hidden', true);
+					ready();
+				}
+				reader.readAsText(f);
+			}
+		}
+		document.getElementById('file1').addEventListener('change', handleFileSelect1, false);
+		document.getElementById('file2').addEventListener('change', handleFileSelect2, false);
+
+
+    	// Set constants
+    	mapWidth		= 650;			// Dimensions of map rectangle
+    	mapHeight		= 600;			// Dimensions of map rectangle
+    	videoInterval	= 200;			// Time interval for the video, and initialize intervalID
+    
+		// Making group of elements in the svg's
+		var svgRectsContainer = d3.select("#svgRectsContainer")
+		
+		// Zooming behavior
+		var zoom = d3.zoom()
+    		.scaleExtent([1, 20])
+    		.on("zoom", function() {
+    			d3.selectAll("g.map").attr("transform", d3.event.transform);
+			});
+			
+		// Initializations of global variables
+		var myVariables = [];
+		var path;
+		var projection;
+		var timeId;
+    	var timeMinId;
+    	var timeMaxId;
+		var intervalID = undefined;
+    	
+    	// Get the data corresponding to the specific timePeriod
+    	function getPeriodData(){
+    		periodData = data['values'][timeId];
+    		return periodData;
+    	}
+    	
+    	function drawPoints(gSelection, periodData){
+			gIndex = gSelection.attr('id').slice(1)
+			varName = myVariables[gIndex];
+			varIdx = varNames.indexOf(varName)
+			
+    		// Remove any existing dot
+    		gSelection.selectAll("circle").remove()
+    		
+    		// Add current dot with corresponding color
+			gSelection.selectAll("circle")
+				.data(periodData).enter()
+				.append("circle")
+				.attr("cx", function (d) { return projection([d[0],d[1]])[0]; }) // d[0] is longitude
+				.attr("cy", function (d) { return projection([d[0],d[1]])[1]; }) // d[1] is latitude
+				.attr("r", "1px")
+				.attr("fill", function (d) {
+					if (d[varIdx] > 0){ // TO DO: define color scale...
+						return 'red';
+					} else{
+						return 'black';
+					}
+				})
+		}
+    	
+    	function drawMap(gSelection){
+			// Draw the maps
+			gSelection.selectAll("path")
+    				.data(topo.features)
+					.enter()
+					.append("path")
+    				.attr("class", "regionDelimiter")
+					// draw each geo unit
+					.attr("d", d3.geoPath()
+						.projection(projection)
+					)
+    				.attr("fill", 'yellow')
+			
+			// Draw dots
+			periodData = getPeriodData();
+			drawPoints(gSelection, periodData);
+		}
+		
+		// Called when all the data (and geography) are loaded
+		function ready() {
+			// Get geoIds, timeIds, and names of variables
+ 			periodIdField	= data['periodIdField']
+ 			periodIds		= data['periodIds']
+			varNames		= data['VariableNames'] // First two variables should be longitude and latitude
+			timeMinId		= 0;
+			timeMaxId		= periodIds.length -1;
+			
+			/********* Define projection ********/
+    		/* Get extreme points and center */
+			coordsBox = topo.bbox;
+			coordsCenter = [0.5*(coordsBox[0]+coordsBox[2]), 0.5*(coordsBox[1]+coordsBox[3])];
+			coordsExtremes = [[coordsBox[0], coordsBox[1]], [coordsBox[2], coordsBox[3]]];
+			
+			// Find the optimal scale
+			projection0 = d3.geoConicConformal()
+				.center(coordsCenter)
+				.scale(1)
+				.translate([mapWidth / 2, mapHeight / 2]);
+ 			truc1 = projection0(coordsExtremes[0])
+ 			truc2 = projection0(coordsExtremes[1])
+ 			diffX = Math.abs(truc2[0] - truc1[0]);
+ 			diffY = Math.abs(truc2[1] - truc1[1]);
+ 			myscale = Math.min((mapWidth-5)/diffX, (mapHeight-5)/diffY);
+			
+			// Define the projection with the optimal scale
+			projection = d3.geoConicConformal()
+				.center(coordsCenter)
+				.scale(myscale)
+				.translate([mapWidth / 2, mapHeight / 2]);
+			path = d3.geoPath();
+			path.projection(projection);
+			
+			/********* Other initializations ********/
+			// Reset timeId at start
+			timeId = timeMinId;
+			
+			// Set title
+			title4Display = periodTitle(timeId);
+			d3.select('#mytitle').text(title4Display)
+			
+			// Hide spinner
+			hideSpinner();
+		}
+    	
+    	// Update display of all maps (title + filling of shapes)...
+    	// ... this is called when there is a change of time period
+		function updateDisplay4Period(){
+			title4Display = periodTitle(timeId);
+			d3.select('#mytitle').text(title4Display)
+			
+			periodData = getPeriodData();
+			svgRectsContainer.selectAll("g.map").each(function(dd,i){
+    			drawPoints(d3.select(this), periodData);
+    		})
+		}
+
+		// Opens up a menu in which the user decides which map to add
+		function openAddMapMenu(){
+ 			var newMapMenu = d3.select("body").append("div")
+     			.attr("id", "newMapMenu")
+    			.attr("class", "newMapMenu")
+     		newMapMenu.append('p').html("Choose variable")
+     		myselect = newMapMenu.append('select').attr('id', 'newMapMenuSelect')
+     		
+     		varNames.slice(2).forEach(function (item, index) { // slice(2) because the first two varNames are longitude and latitude
+     			myselect.append('option').attr('value', item).html(item)
+			});
+			
+			newMapMenu.append('br')
+			newMapMenu.append('button').html('OK').attr('onclick', "processOKAddMapMenu();")
+			newMapMenu.append('button').html('Cancel').attr('onclick', "processCancelAddMapMenu();")
+		}
+		
+		// Process click on OK in the menu to add map
+		function processOKAddMapMenu(){
+			var sel = document.getElementById('newMapMenuSelect');
+			valueChosen = sel.options[sel.selectedIndex].value;
+			addMap(valueChosen);
+			d3.select("body").selectAll("#newMapMenu").remove()
+		}
+		
+		// Process click on Cancel in the menu to add map
+		function processCancelAddMapMenu(){
+			d3.select("body").selectAll("#newMapMenu").remove()
+		}
+		
+		// Remove a map (idxes start at 0)
+		function removeMap(mapIdx){
+			svgRectsContainer.selectAll("#mapContainer" + mapIdx.toString()).remove()
+		}
+ 
+ 		// Add a map (idxes start at 0)
+		function addMap(varName){
+			// Get mapIdx, include relevant variable name in array myVariables
+			myVariables.push(varName)
+			mapIdx = myVariables.length - 1;
+			
+			mapIdx = mapIdx.toString()
+			
+			// Create mapContainer
+			var mapContainer = svgRectsContainer.append('div')
+				.attr('class', 'mapContainer')
+    			.attr('id', 'mapContainer' + mapIdx)
+			
+			// Add map title
+			mapContainer.append('h2')
+				.html(varName)
+			
+			// Add svg for the map
+			var svg = mapContainer.append('svg')
+			svg.attr("width", mapWidth)
+			svg.attr("height", mapHeight)
+			
+			// Add map
+			svg.append("g")
+				.attr('id', 'g' + mapIdx)
+				.attr('class', 'map')
+			svg.call(zoom)
+			drawMap(svg.selectAll("g.map"), topo, myVariables.length-1);
+			
+			// Add clickable image that removes the map
+			mapContainer.append('img')
+				.attr('src', '../assets/images/minus.png')
+				.attr('class', 'clickable')
+				.attr('onclick', 'removeMap(' + mapIdx +');')
+		}
+		
+		// Function that outputs the title for the period
+		function periodTitle(mytimeId){
+			return periodIdField + ': ' + periodIds[mytimeId].toString();
+		}
+		
+	</script>
+      
+  </body>
+</html>

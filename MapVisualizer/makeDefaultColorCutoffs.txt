@@ -1,0 +1,50 @@
+########################################################################################
+# This script takes a CSV file as input with data at the period-location-specific level.
+# From it, it outputs a json file that defines cutoffs to be used in color display.
+#
+# The input file should have the following format (one and only one row for each period-location):
+#	Week,DEP,Var1,Var2,Var3
+#	Week1,01,3,2,6
+#	Week1,2A,2,5,4
+#	Week2,01,4,8,2
+#	Week2,2A,1,3,6
+#
+# The first two columns are discarded; the cutoffs are defined by looking at quantiles of each variable across all rows.
+# 
+# Example use:
+#	python makeDefaultColorCutoffs.py input.csv output.json
+########################################################################################
+
+import sys,json
+from file_access import readDataFromFile
+import numpy as np
+
+# Read input arguments
+[inputFile, outputFile] = sys.argv[1:3]
+
+# Initialize output
+geoOutput = {}
+
+# Get variable names
+fin = open(inputFile, 'r')
+headers = fin.readline()
+fin.close()
+headers = headers.rstrip().split(',')[2:]
+NumVars = len(headers)
+
+# Get values
+Vars = readDataFromFile(inputFile, ',', True, range(2+1,3+NumVars))
+for vidx in range(len(Vars)):
+    VarName = headers[vidx]
+    values = Vars[vidx]
+    values = [float(vv) for vv in values]
+    myquantiles = [0 for qidx in range(6)]
+    for qidx in range(6):
+        if len(values) > 0:
+            mycutoff = np.quantile(values, [1./(7-qidx)])
+        myquantiles[qidx] = mycutoff.tolist()[0]
+        values = [vv for vv in values if vv > mycutoff]
+    geoOutput[VarName] = myquantiles
+
+with open(outputFile, "w") as myfile:
+    json.dump(geoOutput, myfile)

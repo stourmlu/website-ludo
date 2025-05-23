@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>MapVisualizer instructions</title>
+		<link rel="stylesheet" href="ludo_style.css">
+  </head>
+  <body>
+  	<div id="instructions_section">
+  		<h2>Sample input files</h2>
+  		<ul>
+  			<li><a href="geography.geojson">Geographic shapes</a></li>
+  			<li><a href="data.json">Data</a></li>
+  			<li><a href="cutoffs.json">Color cutoffs</a></li>
+  		</ul>
+  		<br>
+  		<hr>
+  		<h2>Preparing your own files</h2>
+  		<h3>Geographic shapes</h3>
+  			The geography should be defined in the WGS84 projection (Longitude,Latitude) in a geojson file.
+  			The id that identifies each geographic shape should be stored as one of the properties of that object (e.g. StateId, CountyId, ...).
+  			<br>
+  			Geographic shapes are commonly defined in shapefiles (extension .shp).
+  			Several tools exist to convert them into the geojson format, including <a href="https://www.npmjs.com/package/shapefile">this one</a>.
+  		<hr>
+  		<h3>Data file</h3>
+  		The data should be provided in json format. The easiest thing to do is to produce a CSV file, 
+  		and then use <a href="convertCsv2Json.txt">this Python script</a> to convert the data from the CSV format 
+  		to the required json format.
+  		<br>
+  		The CSV file should have the following columns (even if there is only one time period): PeriodId,GeoShapeId,Var1,Var2,Var3, ...
+  		<br>
+  		<a href="data.csv">Here</a> is the CSV file corresponding to the sample json data file provided above.
+  		<br>
+  		<br>
+  		<b>NOTE:</b> The field "GeoShapeId" (which could be StateId, CountyId, etc.) should be the same as in the geojson file,
+  			as the two will be matched using that field.
+  		<hr>
+  		<h3>Color cutoff file</h3>
+  			The cutoff values at which there should be a change in color are defined in that file. While there is no "right way" to define them,
+  			a good starting point is to use <a href="makeDefaultColorCutoffs.txt">this Python script<a> to define these cutoffs.
+  			<br>
+  			The Python script looks at the distribution of values for each variable, and defines the cutoffs by using quantiles.
+  		<hr>
+  	</div>      
+  </body>
+</html>

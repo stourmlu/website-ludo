@@ -1,0 +1,199 @@
+<!--  Written by Ludovic Stourm -->
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>Demo of the Bass model</title>
+		<link rel="stylesheet" href="../assets/css/ludo_style.css">
+    
+	<!-- Load d3.js -->
+	<script src="https://d3js.org/d3.v4.js"></script>
+	<script src="../assets/js/bass.js"></script>
+  </head>
+  <body>
+  	<div id="visualization_section">
+  		<h1 id='mytitle'>Demo of the Bass model</h1>
+  		<div id="svgRectsContainer">
+  			
+  		</div>
+  		<br>
+  		<div>
+  			<div class='parameter-choice'>
+  				<span>p</span>
+  				<input type="range" min="1" max="500" value="100" class="slider" id="pSlider" oninput="changeP(true);">
+  				<span id='pValueSpan'></span>
+  			</div>
+  			<div class='parameter-choice'>
+  				<span>q</span>
+  				<input type="range" min="0" max="5000" value="2000" class="slider" id="qSlider" oninput="changeQ(true)">
+  				<span id='qValueSpan'></span>
+  			</div>
+  			<div class='parameter-choice'>
+  				<span>m</span>
+  				<input type="range" min="0" max="10000" value="5000" class="slider" id="mSlider" oninput="changeM(true)">
+  				<span id='mValueSpan'></span>
+  			</div>
+  		</div>
+  		<br>
+  	</div>
+  	</div>
+  	
+  	
+  	<script type="text/javascript">
+    	// Set constants
+  		var NumPeriods		= 100;
+  		const maxNewY		= 1e3;
+  		const maxCumY		= 1e4;
+    	
+    	const margin = {top: 10, right: 30, bottom: 30, left: 60};
+		const plotWidth = 560 - margin.left - margin.right;
+		const plotHeight = 500 - margin.top - margin.bottom;
+    	
+  		var pSlider = document.getElementById("pSlider");
+  		var qSlider = document.getElementById("qSlider");
+  		var mSlider = document.getElementById("mSlider");
+  		
+  		var pValueSpan = document.getElementById("pValueSpan");
+  		var qValueSpan = document.getElementById("qValueSpan");
+  		var mValueSpan = document.getElementById("mValueSpan");
+  	
+  		var pValue;
+  		var qValue;
+  		var mValue;
+  		
+
+		// Making group of elements in the svg's
+		var svgRectsContainer = d3.select("#svgRectsContainer")
+  		
+		// Make X rescaling function for display
+		var xScale = d3.scaleLinear()
+			.domain([0, NumPeriods])
+			.range([0, plotWidth]);
+			
+		// Make Y rescaling function for display (new sales)
+		var newYScale = d3.scaleLinear()
+			.domain([0, maxNewY])
+			.range([ plotHeight, 0]);
+			
+		// Make Y rescaling function for display (new sales)
+		var cumYScale = d3.scaleLinear()
+			.domain([0, maxCumY])
+			.range([ plotHeight, 0]);
+
+
+		////////// PLOT OF NEW SALES //////////
+		// Create plotContainer for new sales
+		var plotContainer = svgRectsContainer.append('div')
+			.attr('class', 'plotContainer')
+    		.attr('id', 'plotContainer0')
+			
+		// Add plot title
+		plotContainer.append('h2').html('New sales')
+		
+		// Add svg to contain the plot
+		var svgNew = plotContainer.append('svg')
+			.attr("width", plotWidth + margin.left + margin.right)
+			.attr("height", plotHeight + margin.top + margin.bottom)
+			.append("g")
+				.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+		
+		// Add X axis
+		svgNew.append("g")
+   			.attr("class", "x axis")
+			.attr("transform", "translate(0," + plotHeight + ")")
+			.call(d3.axisBottom(xScale));
+
+		// Add Y axis
+		svgNew.append("g")
+    		.attr("class", "y axis")
+			.call(d3.axisLeft(newYScale));
+
+		// Create d3's line generator
+		var lineNew = d3.line()
+			.x(function(d, i) {return xScale(i); }) // set the x values for the line generator
+			.y(function(d) {return newYScale(d); }) // set the y values for the line generator
+		
+		////////// PLOT OF CUMULATIVE SALES //////////
+		// Create plotContainer for cumulative sales
+		var plotContainer = svgRectsContainer.append('div')
+			.attr('class', 'plotContainer')
+    		.attr('id', 'plotContainer1')
+			
+		// Add plot title
+		plotContainer.append('h2').html('Cumulative sales')
+	
+		// Add svg to contain the plot
+		var svgCum = plotContainer.append('svg')
+			.attr("width", plotWidth + margin.left + margin.right)
+			.attr("height", plotHeight + margin.top + margin.bottom)
+			.append("g")
+				.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+		
+		// Add X axis
+		svgCum.append("g")
+   			.attr("class", "x axis")
+			.attr("transform", "translate(0," + plotHeight + ")")
+			.call(d3.axisBottom(xScale));
+
+		// Add Y axis
+		svgCum.append("g")
+    		.attr("class", "y axis")
+			.call(d3.axisLeft(cumYScale));
+
+		// Create d3's line generator
+		var lineCum = d3.line()
+			.x(function(d, i) {return xScale(i); }) // set the x values for the line generator
+			.y(function(d) {return cumYScale(d); }) // set the y values for the line generator
+	
+	
+		//////////////////////////////////////////////
+		
+		// https://medium.com/@PepsRyuu/why-i-no-longer-use-d3-js-b8288f306c9a
+	
+		//////////////////////////////////////////////
+	
+  		function drawCurve(){
+			d3.select("body").selectAll("#svgNewLine").remove()
+			d3.select("body").selectAll("#svgCumLine").remove()
+  		
+  			// Compute y_values
+  			res = Bass_forecast(pValue, qValue, mValue, NumPeriods, 0);
+  			newY_values = res[0]; cumY_values = res[1];
+		
+			svgNew.append("path")
+				.attr("id", "svgNewLine")
+				.attr("class", "chart-line")
+				.datum(newY_values)
+				.attr("d", lineNew); // calls the line generator
+		
+			svgCum.append("path")
+				.attr("id", "svgCumLine")
+				.attr("class", "chart-line")
+				.datum(cumY_values)
+				.attr("d", lineCum); // calls the line generator
+			
+			
+		}
+  		function changeP(updateCurveFlag){
+	  		pValue = 1e-4*pSlider.value;
+  			pValueSpan.textContent = pValue;
+  			if(updateCurveFlag){drawCurve();}
+  		}
+  		function changeQ(updateCurveFlag){
+	  		qValue = 1e-4*qSlider.value;
+  			qValueSpan.textContent = qValue;
+  			if(updateCurveFlag){drawCurve();}
+  		}
+  		function changeM(updateCurveFlag){
+	  		mValue = mSlider.value;
+  			mValueSpan.textContent = mValue;
+  			if(updateCurveFlag){drawCurve();}
+  		}
+  	
+  		changeP(false);
+  		changeQ(false);
+  		changeM(false);
+  		drawCurve();
+	</script>
+  </body>
+</html>

@@ -1,0 +1,169 @@
+<!--  Written by Ludovic Stourm -->
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>Demo of K-means</title>
+		<link rel="stylesheet" href="../assets/css/ludo_style.css">
+    
+	<!-- Load d3.js -->
+	<script src="https://d3js.org/d3.v4.js"></script>
+	<script src="../assets/js/kmeans_algo.js"></script>
+  </head>
+  <body>
+  	<div id="visualization_section">
+  		<h1 id='mytitle'>Demo of K-means algorithm</h1>
+  		<img id='spinner' src='../assets/images/spinner.gif' class="hiddenImg"></img>
+  		<div id="svgRectsContainer"></div>
+  		<br>
+  		<div id='video_imgs'>
+			Number of clusters:
+			<select id="NumClustersSelect">
+				<option value="2">2</option>
+				<option value="3">3</option>
+				<option value="4">4</option>
+				<option value="5">5</option>
+			</select>
+  			<button id="actionButton"; onclick="takeAction()" class="w3-button w3-black">Start with random centroids</button>
+  		</div>
+  		<br>
+  	</div>
+  	</div>
+  	
+  	
+  	<script type="text/javascript">
+    	// Set constants
+    	const plotWidth		= 500;			// Dimensions of plot rectangle
+    	const plotHeight		= 500;			// Dimensions of plot rectangle
+				
+		// Making group of elements in the svg's
+		var svgRectsContainer = d3.select("#svgRectsContainer")
+		
+		// This function adds the centroids to the scatter plot.
+		function addCentroids2ScatterPlot(gSelection, centroids){
+			gSelection.selectAll("dot")
+  				.data(centroids)
+					.enter()
+					.append("circle")
+      				.attr("cx", function (d) { return x(d[0]); } )
+      				.attr("cy", function (d) { return y(d[1]); } )
+      				.attr("r", 8)
+      				.attr("class", 'centroid')
+		}
+		
+		// This function removes the centroids from the scatter plot.
+		function removeCentroidsFromScatterPlot(gSelection, centroids){
+			gSelection.selectAll("circle.centroid").remove()
+		}
+		
+		// This function changes the color of each dot as a function of the cluster it is assigned to.
+		function paintDotsByCluster(gSelection, assignments){
+			gSelection.selectAll("circle")
+				.data(assignments)
+				.attr("fill", function (d) {return groupColors[d]; } )
+		}
+
+		// Draw random points
+		NumPoints = 200;
+		var points = drawRandomPoints(2, NumPoints);
+		for(ii=0;ii<70; ii++){
+			points[ii][0] = 0.2+ 0.3*points[ii][0];
+			points[ii][1] = 0.4+ 0.3*points[ii][1];
+		}
+		for(ii=70;ii<120; ii++){
+			points[ii][0] = 0.7+ 0.3*points[ii][0];
+			points[ii][1] = 0.4+ 0.3*points[ii][1];
+		}
+		for(ii=120;ii<NumPoints; ii++){
+			points[ii][0] = 0.5+ 0.35*points[ii][0];
+			points[ii][1] = 0.1+ 0.35*points[ii][1];
+		}
+		
+		// Create plotContainer
+		var plotContainer = svgRectsContainer.append('div')
+			.attr('class', 'plotContainer')
+    		.attr('id', 'plotContainer0')
+		
+		// Add svg to contain the plot
+		var svg = plotContainer.append('svg')
+		svg.attr("width", plotWidth)
+		svg.attr("height", plotHeight)
+    	
+		// Make X rescaling function for display
+		var x = d3.scaleLinear()
+			.domain([0, 1])
+			.range([ 0, plotWidth]);
+
+		// Make Y rescaling function for display
+		var y = d3.scaleLinear()
+			.domain([0, 1])
+			.range([ plotHeight, 0]);
+    	
+		// Draw the plot
+		svg.selectAll("dot")
+  			.data(points)
+				.enter()
+				.append("circle")
+      			.attr("cx", function (d) { return x(d[0]); } )
+      			.attr("cy", function (d) { return y(d[1]); } )
+      			.attr("r", 2)
+
+		// Define number of groups and colors
+		var NumGroups;
+		var groupColors = ['blue', 'red', 'green', 'orange', 'grey'];
+		
+		// Initialize variables
+		var actionIdx = -1;
+		var oldAssignments, assignments, groupSizes, centroids;
+		
+		// Take actions (k-means algo)
+		function takeAction(){
+			if(actionIdx == -1){
+				// Read number of groups
+				sel1 = document.getElementById('NumClustersSelect');
+				NumGroups = sel1.options[sel1.selectedIndex].value;
+				d3.select("#NumClustersSelect").attr("disabled", true);
+				d3.select("#actionButton").text("Assign points to clusters");
+				
+				centroids = drawRandomCentroids(points, NumGroups);
+				// Make sure they're not too dispersed
+				for(var kk=0; kk<NumGroups;kk++){
+					centroids[kk][0] = 0.5 + 0.1*(centroids[kk][0]);
+					centroids[kk][1] = 0.5 + 0.1*(centroids[kk][1]);
+				}
+				
+				addCentroids2ScatterPlot(svg, centroids);
+				actionIdx = 0;
+				return;
+			}
+		
+			if(actionIdx == 0){
+				// Compute new assignments + repaint colors
+				oldAssignments = assignments;
+				assignments = assignPoints2Centroids(points, centroids);
+				paintDotsByCluster(svg, assignments);
+				if(oldAssignments){
+					NumDiffs = countArrayDifferences(oldAssignments, assignments);
+					if(NumDiffs == 0){
+						d3.selectAll('#visualization_section').append("p").text('Convergence has been reached.');
+						actionIdx = 2;
+						return;
+					}
+				}
+				actionIdx = 1;
+				d3.select("#actionButton").text("Compute centroids");
+				return;
+			}
+			if(actionIdx == 1){
+				// Compute new centroids
+				[centroids, groupSizes] = computeCentroids(points, assignments, centroids);
+				removeCentroidsFromScatterPlot(svg, centroids);
+				addCentroids2ScatterPlot(svg, centroids);
+				actionIdx = 0;
+				d3.select("#actionButton").text("Assign points to clusters");
+				return;
+			}
+		}
+	</script>
+  </body>
+</html>

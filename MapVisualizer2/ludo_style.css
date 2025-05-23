@@ -1,0 +1,53 @@
+div.mapContainer{
+	border-style: solid;
+	display:inline-block;
+}
+
+path {stroke: grey; stroke-width: 0.25px; }
+
+img.video_img{height: 20px; width: 20px; padding: 5px;}
+img.hiddenImg{display: none;}
+img.greyedImg{opacity: 0.5;}
+
+
+
+#spinner{height: 20px; width: 20px;}
+
+img.clickable{
+	height: 20px;
+	width: 20px;
+	padding: 5px;
+	cursor: pointer;
+}
+
+div.tooltip {
+	position: absolute;
+	text-align: center;
+	color: black;
+	width: 275px;
+	height: 37px;
+	padding: 2px;
+	font: 12px sans-serif;
+	background: grey;
+	border: 0px;
+	border-radius: 8px;
+	pointer-events: none;
+}
+
+select{
+	border: 5px;
+	margin: 5px;
+}
+
+button{
+	border: 5px;
+	margin: 5px;
+}
+
+input{
+	display: inline;
+}
+
+div.hidden{
+	display: none;
+}
