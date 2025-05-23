@@ -1,0 +1,93 @@
+div.mapContainer{
+	border-style: solid;
+	display:inline-block;
+}
+
+div.plotContainer{
+	border-style: solid;
+	display:inline-block;
+	height:610px;
+	width:610px;
+	overflow-x:auto;
+	overflow-y:auto;
+}
+
+/*path {stroke: grey; stroke-width: 0.25px; }*/
+path.regionDelimiter {stroke: grey; stroke-width: 0.25px; }
+
+img.video_img{height: 20px; width: 20px; padding: 5px;}
+img.hiddenImg{display: none;}
+img.greyedImg{opacity: 0.5;}
+
+
+
+#spinner{height: 20px; width: 20px;}
+
+img.clickable{
+	height: 20px;
+	width: 20px;
+	padding: 5px;
+	cursor: pointer;
+}
+
+div.tooltip {
+	position: absolute;
+	text-align: center;
+	color: black;
+	width: 275px;
+	height: 100px;
+	padding: 2px;
+	font: 12px sans-serif;
+	background: grey;
+	border: 0px;
+	border-radius: 8px;
+	pointer-events: none;
+}
+
+select{
+	border: 5px;
+	margin: 5px;
+}
+
+button{
+	border: 5px;
+	margin: 5px;
+}
+
+input{
+	display: inline;
+}
+
+div.hidden{
+	display: none;
+}
+table{
+	border-collapse: collapse;
+}
+tr:nth-child(even) {
+	background-color: #f2f2f2;
+}
+tr.header-row th {
+	background-color: #4CAF50;
+	color: white;
+	text-align: center;
+}
+th{
+	text-align: left;
+}
+td{
+	padding-left: 5px;
+	padding-right: 5px;
+	text-align: right;
+	
+    max-width: 65px;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+path.chart-line{
+	fill: none;
+	stroke: blue;
+	stroke-width: 1.5px;
+}
