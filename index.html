@@ -1,49 +1,63 @@
 ﻿<html>
 	<head>
 		<title>Ludovic Stourm's home page</title>
+		
+		<style>
+			.collapsible {
+				background-color: #E0E0E0;
+				cursor: pointer;
+				padding: 18px;
+				width: 100%;
+				border: none;
+				text-align: left;
+				outline: none;
+			}
+			.active, .collapsible:hover {
+				background-color: #C0C0C0;
+			}
+			.content {
+				padding: 0 18px;
+				max-height: 0;
+				overflow: hidden;
+				transition: max-height 0.2s ease-out;
+			}
+		</style>
+		
 	</head>
 	<body>
 		<div id='bioSection'>
 		<table>
 			<tr>
 				<td>
-					<div><img src="assets/thumb.jpg" height="350" width="281"></div>
+					<div><img src="assets/thumb.jpg" height="350" width="281" style="padding:15px;"></div>
 				</td>
 				<td>
-					<div id="titleSection" style="margin:15px">
+					<div id="titleSection" style="margin:15px; width:600px">
 						<h1>Ludovic Stourm</h1>
 						<h3>Assistant Professor of Marketing at HEC Paris</h3>
 						<p><b>Research interests:</b> Sharing economy, Network effects, Diffusion of innovations, Spatial demand, Granular data, Cross-category models of purchase
 					</div>
 					
-					<div id='biography' style="margin:15px">
-						<p>
-						I am an Assistant Professor of Marketing at HEC Paris.
-						I hold a Ph.D. degree from the Wharton School of the University of Pennsylvania, a Master’s degree in Statistics from Harvard University, 
-							and an Ingénieur degree in Computer Science from the Université de Technologie de Compiègne.
-						</p>
-						
+					<div id='biography' style="margin:15px; width:600px">
 						<p>
 						I am an empirical modeler who builds econometric models to investigate aspects of consumer preferences and generate recommendations for companies regarding their marketing activities.
+						</p>
+						<p>
 						My research is divided in two streams focused on different substantive domains: digital platforms and consumer packaged goods.
+						</p>
+						<p>
 						I employ different methods, including methods from Empirical Industrial Organization, continuous-time event modeling, spatial modeling, and Bayesian estimation methods.
-						I also develop efficient computation techniques to estimate complex models of demand. 
-						I enjoy working on rich datasets by combining data from multiple sources. My research has been published in leading journals such as <i>Marketing Science</i> and the <i>Journal of Marketing Research</i>.
-						
+						I also develop efficient computation techniques to estimate complex models of demand.
 						</p>
-						
 						<p>
-						Prior to my academic career, I worked as a software engineer at Apple and as a consultant applying data-driven methods to solve marketing problems. I am a member of the American Marketing Association (AMA) and the Institute for Operations Research and the Management Sciences (INFORMS).
+						I enjoy working on rich datasets by combining data from multiple sources.
 						</p>
-								
-						<p>
 						<a href="assets/CV.pdf">Curriculum Vitae</a> &nbsp;
 						<a href="https://scholar.google.com/citations?user=hSfmwfAAAAAJ">Google Scholar</a>&nbsp;
 						<a href="https://papers.ssrn.com/sol3/cf_dev/AbsByAuth.cfm?per_id=2770948">SSRN</a>&nbsp;
 						<a href="https://fr.linkedin.com/in/ludovicstourm">LinkedIn</a>&nbsp;
 						<a href="https://www.hec.edu/en/faculty-research/faculty-directory/faculty-member/stourm-ludovic">Faculty page</a>&nbsp;
 					<!--	<a href="https://github.com/stourmlu">GitHub</a> -->
-						</p>
 					<div/>
 				</td>
 			<tr/>
@@ -53,8 +67,9 @@
 		<hr>
 		
 		<div id='research_section'>
-			<h2>Research</h2>
-			<b>Peer-reviewed publications:</b>
+			<h2 class="collapsible">Research</h2>
+			<div class="content">
+			<h3>Peer-reviewed publications:</h3>
 			<ul>
 				<li>
 					Ludovic Stourm, Valeria Stourm (2024), <a href="https://doi.org/10.1287/mksc.2022.0458">Estimating Sparse Spatial Demand to Manage Crowdsourced Supply in the Sharing Economy</a>, <i>Marketing Science</i>, Articles in Advance.
@@ -76,17 +91,18 @@
 						<a href="https://pubsonline.informs.org/doi/suppl/10.1287/mksc.2019.1218">Replication files</a>&nbsp;
 				</li>
 			</ul>
-		</div>
 <!--			<br/>
 			<b>Working papers:</b>
 			<ul>
 			</ul>
 -->
+		</div>
+		</div>
 		
-		<hr>
 		
 		<div id='teaching_section'>
-			<h2>Teaching</h2>
+			<h2 class="collapsible">Teaching</h2>
+			<div class="content">
 			At HEC Paris, I teach the Marketing Management course in the Grande Ecole program and the Marketing Science course in the PhD program.
 			
 			<br/>
@@ -97,9 +113,8 @@
 				<li><a href="MapVisualizer">Map visualizer</a></li>
 				<li><a href="DataVisualizer">Data visualizer</a></li>
 			</ul>
-
+			</div>
 		</div>
-		<hr>
 		
 		<!--<div id='service_section'>
 			<h2>Service</h2>
@@ -107,13 +122,31 @@
 		<hr> -->
 		
 		<div id='media_section'>
-			<h2>Media coverage</h2>
+			<h2 class="collapsible">Media coverage</h2>
+			<div class="content">
 			<ul>
 				<li><a href="https://www.hec.edu/en/data-analytics">Editorial of the special issue of Knowledge@HEC on Big Data (2017)</a></li>
 				<li><a href="https://www.france24.com/fr/20190204-plateforme-collaborative-partage-airbnb-logement-immobilier-uber-economie-internet">Appearance in "Le gros mot de l'éco" on France 24 (2019)</a></li>
 			</ul>
+			</div>
 		</div>
-		<hr>
 		<br>
+		
+		
+		<script>
+			var coll = document.getElementsByClassName("collapsible");
+			var i;
+			for (i = 0; i < coll.length; i++) {
+			  coll[i].addEventListener("click", function() {
+			    this.classList.toggle("active");
+			    var content = this.nextElementSibling;
+			    if (content.style.maxHeight){
+			      content.style.maxHeight = null;
+			    } else {
+			      content.style.maxHeight = content.scrollHeight + "px";
+			    } 
+			  });
+			}
+		</script>
 	</body>
 </html>
